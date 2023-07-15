@@ -1,0 +1,269 @@
+--- 
+toc-title: Conteúdo
+---
+
+# Modelos de Classificação 
+
+```{r, echo=F}
+data_cancer = readr::read_csv('./data/data.csv') |>
+  dplyr::mutate(diagnosis = as.factor(diagnosis )) |>
+  dplyr::select(id, diagnosis , dplyr::contains('_mean'))
+
+set.seed(607) #Fixando semente para reprodução dos resultados 
+data_cancer_split = rsample::initial_split(data_cancer, prop = 0.80, strata = diagnosis)
+data_cancer_train = rsample::training(data_cancer_split)
+data_cancer_test = rsample::testing(data_cancer_split)
+
+```
+
+A classificação correta de tumores benignos e malignos desempenha um papel crucial no diagnóstico precoce e tratamento eficaz do câncer. Nesse contexto, os modelos de classificação surgem como ferramentas promissoras na área médica, permitindo a análise automatizada de características clínicas, genéticas e radiológicas para diferenciar entre tumores benignos e malignos. Esses modelos utilizam algoritmos de aprendizado de máquina para extrair padrões relevantes dos dados e fazer previsões precisas. Ao fornecer informações valiosas para médicos e especialistas, os modelos de classificação podem auxiliar na identificação de pacientes em risco, direcionar tratamentos personalizados e melhorar os resultados clínicos. Neste trabalho, exploraremos diferentes abordagens de modelos de classificação e discutiremos sua aplicação na discriminação entre tumores benignos e malignos, com o objetivo de aprimorar a detecção precoce e o tratamento eficiente do câncer.
+
+A documentação dos dados cita que tal classificação indica o proseguindo ou não do paciente para exames mais invasivos, tal sequencia é ilustrada pelo seguinte diagrama:
+
+![](figs/diag_fp_fn.drawio.png){height=500px, fig-align="center"}
+
+Porém, assim como todos modelos estatísticos, os modelos de classificação apresentam erros, tais erros de classificação são denominados **Falso Positivo** e **Falso Negativo**, onde no caso dos dados trabalhados:
+
+* Falso Positivo: Falsa classificação de um paciente sem tumor maligno como portador de tal tumor
+
+* Falso Negativo: Falsa classificação de um paciente com tumor maligno como não sendo portador de tal tumor
+
+Tal definição é importante para a definição de limites e custos de erros.
+
+O custo de erro associado ao erro **Falso Negativo** é maior que o **Falso Positivo** pois indica que um paciente com tumor maligno não deverá avancar em seu tratamento, podendo levar o mesmo a um estágio mortal da doença. Já a classificação Falso Positivo indica que o paciente sem tumor maligno avançe na diagnóstico da doença, onde serão utilizados metodos mais invasivos para isso
+
+Portanto, o diagrama real é dada por:
+
+![](figs/diag_ver.drawio.png){height=500px, fig-align="center"}
+
+
+
+```{r, message = F, warning=F}
+library(tidymodels)
+library(tidyverse)
+
+cancer_recipe = recipes::recipe(diagnosis ~ .,
+                                data = data_cancer_train) |>
+      update_role(id, new_role = "id")
+
+wf = workflows::workflow() |> 
+  workflows::add_recipe(cancer_recipe)
+
+
+cross_folds = rsample::vfold_cv(data_cancer_train, strata = diagnosis)
+```
+
+
+## Análise de Discriminante
+
+O objetivo da análise discriminante é encontrar uma função discriminante que maximize a separação entre os grupos, levando em consideração a estrutura das variáveis preditoras.
+
+Dado o contexto do problema estudado, a função discriminante estimada foi aquela que maximizou a separação entre os grupos de pessoas  com tumor benigno e maligno.
+
+### Análise via Discriminante Linear
+
+```{r}
+library(discrim)
+```
+
+
+```{r}
+lda_spec = discrim_linear() |>
+  set_mode('classification') |>
+  set_engine('MASS')
+
+lda_fit = wf |>
+  add_model(lda_spec) |>
+  fit(data = data_cancer_train)
+  
+```
+
+```{r}
+lda_metrics = lda_fit |> 
+  fit_resamples(cross_folds,
+    metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
+    control = control_resamples(save_pred = TRUE)) |>
+  collect_metrics() |>
+  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
+```
+
+
+
+### Análise via Discriminante Quadrático
+
+```{r}
+cov_diagnosis = list('B','M') |>
+  map(~data_cancer_train |>
+        filter(diagnosis == .) |>
+        dplyr::select(-'id', -'diagnosis') |>
+        cov())
+
+cov_diagnosis[[1]] - cov_diagnosis[[2]]
+```
+
+
+```{r}
+qda_spec = discrim_quad() |>
+  set_mode('classification') |>
+  set_engine('MASS')
+
+qda_fit = wf |>
+  add_model(qda_spec) |>
+  fit(data = data_cancer_train)
+```
+
+```{r}
+qda_fitted_resamples = qda_fit |> 
+  fit_resamples(cross_folds,
+    metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
+    control = control_resamples(save_pred = TRUE))
+
+qda_metrics =  qda_fitted_resamples |>
+  collect_metrics() |>
+  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
+```
+
+```{r}
+augment(qda_fitted_resamples) |>
+  roc_curve(diagnosis, .pred_B) |>
+  autoplot()
+```
+
+
+
+## Escolha do Melhor Discriminante
+
+Observando as estimativas obtidas via, viu-se que ambos os modelos apresentaram desempenho semelhantes. Assim utilizou-se como critério principal aquele que obteve o melhor desempenho na métrica **sensibilidade** dado que o contexto do problema trabalho indica um maior custo de erro para **Falso Negativo**
+
+Para melhor visualização, construi-se a seguinte tabela comparando o valor da sensibilidade de ambos os modelos:
+
+```{r}
+bind_rows(lda_metrics, qda_metrics) |>
+  filter(.metric == 'sens') |>
+  dplyr::select(-.config, -.estimator) |>
+  mutate(model = c('LDA', 'QDA')) |>
+  relocate(model) |>
+  kableExtra::kbl() %>%
+  kableExtra::kable_material(c("striped", "hover"))
+  
+```
+
+Novamente, ambos os modelos se mostraram extramamentes semelhantes, porém notou-se um ligeiro melhor desempenho por parte do modelo Linear. Assim, escolheu-se ele para a etapa de final de escolha de melhor modelo
+
+# Modelos de Regressão e Apredendizado de Máquina
+
+## Regressão Logística
+
+```{r}
+logistic_spec = parsnip::logistic_reg() |>
+  parsnip::set_engine("glm", family = stats::binomial(link='logit')) |>
+  parsnip::set_mode("classification")
+```
+
+```{r}
+lr_fit = wf |>
+  workflows::add_model(logistic_spec) |>
+  parsnip::fit(data_cancer_train) 
+
+
+lr_fitted_resamples = fitted_lr_model |>
+  fit_resamples(cross_folds,
+    metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
+    control = control_resamples(save_pred = TRUE))
+
+lr_metrics = lr_fitted_resamples |> 
+  collect_metrics() |>
+  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
+
+lr_fitted_resamples |> collect_metrics()
+```
+
+```{r}
+augment(rs_basic) %>%
+  roc_curve(diagnosis, .pred_B) %>%
+  autoplot()
+```
+
+
+
+## Randon Forest
+
+```{r, message=F, warning=F}
+library(randomForest)
+
+rand_forest_spec = rand_forest(
+  mtry = tune(),
+  trees = 2000,
+  min_n = tune()
+) %>%
+  set_mode("classification") %>%
+  set_engine("randomForest")
+```
+
+```{r}
+rand_forest_fit = wf |>
+  workflows::add_model(rand_forest_spec) 
+
+
+rand_forest_tune = rand_forest_fit |>
+  tune_grid(
+    resamples = cross_folds,
+    metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
+    grid = 20)
+
+rand_forest_tune |>
+  collect_metrics() %>%
+  filter(.metric == 'sens') %>%
+  dplyr::select(mean, min_n, mtry) %>%
+  pivot_longer(min_n:mtry,
+    values_to = "value",
+    names_to = "parameter"
+  ) %>%
+  ggplot(aes(value, mean, color = parameter)) +
+  geom_point(show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "AUC")
+
+
+rand_forest_tune |>
+  collect_metrics() %>%
+  filter(.metric == 'roc_auc') %>%
+  dplyr::select(mean, min_n, mtry) %>%
+  pivot_longer(min_n:mtry,
+    values_to = "value",
+    names_to = "parameter"
+  ) %>%
+  ggplot(aes(value, mean, color = parameter)) +
+  geom_point(show.legend = FALSE) +
+  facet_wrap(~parameter, scales = "free_x") +
+  labs(x = NULL, y = "AUC")
+
+rand_forest_fitted_resamples = rand_forest_fit |>
+  fit_resamples(cross_folds,
+    metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
+    control = control_resamples(save_pred = TRUE))
+
+lr_metrics = lr_fitted_resamples |> 
+  collect_metrics() |>
+  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
+
+lr_fitted_resamples |> collect_metrics()
+```
+
+```{r}
+grid_table = parameters(c(min_n(), mtry())) |>
+  grid_regular()
+
+rand_forest_tune = rand_forest_fit |>
+  tune_grid(
+    resamples = cross_folds,
+    metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
+    grid = grid_table)
+```
+
+
+
+## KNN
+
+
+

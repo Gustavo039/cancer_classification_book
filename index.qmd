@@ -1,0 +1,7 @@
+--- 
+toc-title: Conteúdo
+---
+
+# Testes Assintóticos {.unnumbered}
+
+O câncer de mama é uma doença complexa e de grande impacto na saúde, afetando milhões de mulheres e alguns homens em todo o mundo. A análise estatística e a modelagem desempenham um papel fundamental no estudo dessa doença, permitindo compreender seus fatores de risco, padrões de ocorrência e desenvolver estratégias eficazes de prevenção e tratamento personalizadas. Neste trabalho, exploraremos a importância da análise estatística na pesquisa sobre câncer de mama, abordando diferentes aspectos desse processo, como a análise de dados epidemiológicos e genéticos, a modelagem para previsão de riscos e o uso de técnicas avançadas para identificar subtipos moleculares.

@@ -1,0 +1,14 @@
+--- 
+toc-title: Conteúdo
+---
+
+
+# Câncer de Mama: uma rápida contextualização.
+
+O câncer de mama é uma doença maligna que se origina no tecido mamário. É o tipo de câncer mais comum entre as mulheres em todo o mundo e também pode afetar os homens, embora seja menos frequente. Caracteriza-se pelo crescimento anormal e descontrolado das células mamárias, formando um tumor que pode se espalhar para outras partes do corpo.
+
+![](D:/cancer_breast_model/cancer_book/figs/mammo_breast_cancer_xray_fig.jpg)
+
+Existem diversos fatores de risco associados ao câncer de mama, como idade avançada, histórico familiar da doença, mutações genéticas, exposição a hormônios, obesidade, consumo excessivo de álcool, entre outros. A detecção precoce é fundamental para o sucesso do tratamento, pois permite o diagnóstico em estágios iniciais, quando as chances de cura são maiores.
+
+A análise

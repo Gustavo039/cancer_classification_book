@@ -1,0 +1,35 @@
+project:
+  type: book
+
+book:
+  title: "Análise e Modelagem Classificatória de Dados de Cancer de Mama"
+  author: "Gustavo Almeida Silva"
+
+  page-footer:
+    left: |
+      "Análise e Modelagem Classificatória de Dados de Cancer de Mama foi escrito por Gustavo Almeida Silva
+    right: |
+      Esse documento foi feito com <a href="https://quarto.org/">Quarto</a>.
+  favicon: cover.png
+  
+  chapters:
+    - index.qmd
+    - intro.qmd
+    - exploratory.qmd
+    - models.qmd
+    
+
+bibliography: references.bib
+
+format:
+  html:
+    embed-resources: true
+    theme: united
+    
+pdf:
+    documentclass: scrreport
+
+toc-title: Conteúdo
+execute:
+  warning: false
+  message: false
