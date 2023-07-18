@@ -4,6 +4,8 @@ toc-title: Conteúdo
 
 # Análise exploratória de Dados
 
+
+
 O seguinte capítulo tem como objetivo realizar uma análise exploratória nos dados. Para isso iremos seguir o seguinte esquema:
 
 ![](figs/diag_explo.drawio.png){height=500px, fig-align="center"}
@@ -17,7 +19,8 @@ Carregamento dos dados:
 
 ```{r, echo=FALSE}
 data_cancer = readr::read_csv('./data/data.csv') |>
-  dplyr::mutate(diagnosis = as.factor(diagnosis )) 
+  dplyr::mutate(diagnosis = as.factor(diagnosis )) |>
+  janitor::clean_names()
 
 data_cancer |> dplyr::glimpse()
 ```
@@ -34,7 +37,7 @@ A partir do gráfico de valores faltantes, nota-se que apenas uma coluna possui 
 
 ```{r}
 data_cancer = data_cancer|>
-  dplyr::select(-'...33' )
+  dplyr::select(-'x33' )
 
 
 data_cancer |> head()
@@ -42,14 +45,45 @@ data_cancer |> head()
 
 As 5 primeiras linhas do conjunto de dados mostram que das 32 variáveis remanescentes, 30 são numericas, 1 categórica e a restante representa um ID do paciente analisado. **Os modelos desenvolvidos nesse trabalho buscam classificar o diagnóstico do paciente (tumor maligno ou benigno)** com base nas variáveis numéricas. Assim é importantíssima a análise de tais variáveis, estudando valores de correlação, aderência e significância
 
-Um estudo de simulação, assim como a documentação dos dados indica que não há falta de informação ao se trabalhar com a colunas numericas **_mean**, assim 
+Um estudo de simulação, assim como a documentação dos dados indica que não há falta de informação ao se trabalhar apenas com as variáveis terminadas com  **mean** como explicativas, assim, trabalhou-se apenas como aquelas terminadas em **mean** como variávies explicativas para a variável resposta **diagnosis**:
 
 ```{r}
 data_cancer = data_cancer |>
   dplyr::select(id, diagnosis , dplyr::contains('_mean'))
 ```
 
-Para o estudo, há a necessidade de verificação de desbalanceamento do conjunto de dados. Tal verificcação foi feita em cima de análise gráfica, de proporções de cada grupo
+O conjunto de dados possui 568 observações com 12 colunas restantes após a retirada das demais. Das 12, uma é o ID de cada observação e uma é a variável de interesse **diagnosis**.
+
+As variáveis restantes são:
+
+* **radius_mean**: Média das distâncias do centro aos pontos do perímetro
+
+* **texture_mean**: Média das diferenças dos valores da escala de cinza (visualização celular via microscópío eletrónico)
+
+* **perimeter_mean**: Tamanho médio do tumor central
+
+* **area_mean**: Área média do tumor central
+
+* **smoothness_mean**: Média de variação local em comprimentos de raio
+
+* **compactness_mean**: Função direta do perímetro e da área: $=\frac{perímetro^2}{area-1}$
+
+* **concavity_mean**: Média da severidade das porções côncavas do contorno
+
+* **concavity_points_mean**: Média para o número de porções côncavas do contorno
+
+* **symmetry_mean**:
+
+* **fractal_dimension_mean**: 
+
+Para o estudo, há a necessidade de verificação do balanceamento do conjunto de dados em relação ao diagnóstico do paciente (tumor maligno ou benigno). 
+
+Tal verificação foi feita em cima de análise gráfica, e via Coeficiente de Entropia de Shannon
+
+```{r, echo = F, warning=F, message=F}
+library(tidyverse)
+```
+
 
 ```{r}
 prop_df = data_cancer |>
@@ -60,7 +94,9 @@ data_cancer |>
   ggplot2::ggplot(ggplot2::aes(x = diagnosis, fill = diagnosis)) +
   ggplot2::geom_bar() +
   ggplot2::theme_minimal() +
-  ggthemes::scale_fill_colorblind()
+  ggthemes::scale_fill_colorblind() +
+  ggtitle("Contagem de Diagnósticos por Grupo")
+  
 ```
 
 Alem da visualização gráfica, foi utilizado o **Coeficiente de Entropia de Shannon**, que vai de 0 a 1, onde 0 indica dados totalmente desbalanceados (proporção $0\%$ e $100\%$) e 1 balanceamento completo (proporção $50\%$ e $50\%$)
@@ -71,9 +107,11 @@ DescTools::Entropy(data_cancer$diagnosis |> table())
 
 O Coeficiente calculado foi de: $0.953127$
 
-Assim, a partir do grafico de barras, proporções de cada grupo e teste de Entropia de Shannon, não há evidencias para um desbalanceadmento significativo no conjunto de dados utilizados
+Assim, a partir do grafico de barras, proporções de cada grupo e teste de Entropia de Shannon, não há evidencias para um desbalanceamento  significativo no conjunto de dados utilizados.
 
-O próximo tópico busca tal objetivo .Antes porém,  buscando diminuir o vies amostral, o conjunto de dados será divido em treino e teste, com proporção $80\% \ e \ 20\%$ @, o metodo de divisão utilizado será de amostragem estratificada simples, tal método foi escolhido para evitar desbalanceamento de diagnosticos malignos e benignos nos conjuntos de treino e teste. Portanto, toda a análise e modelagem realizada nos próximos topicos foi em cima do conjunto de dados de teste, ao final da etapa de modelagem foi realizado o ultimo ajuste dos modelos, onde é utilizado o conjunto total dos dados
+
+
+O próximo tópico busca realizar uma análise exploratória nos dados. Antes porém, buscando diminuir o viés amostral, o conjunto de dados foi divido em treino e teste, com proporção $80\% \ e \ 20\%$ [@arafa2021regularized], o metodo de divisão utilizado foi de amostragem estratificada simples, tal método foi escolhido para evitar desbalanceamento de diagnosticos malignos e benignos nos conjuntos de treino e teste. Portanto, toda a análise e modelagem realizada nos próximos tópicos foi em cima do conjunto de dados de teste.
 
 
 
@@ -88,18 +126,23 @@ data_cancer_test = rsample::testing(data_cancer_split)
 
 ## Análise e interpretação das variaveis
 
+Buscando observar o comportamento de cada variável dividida por grupo de tratamento, construi-se o seguinte gráfico:
+
 ```{r}
-hist_vars_cancer = apply(data_cancer_train[,3:12], 2, 
-      function(vars_){
-          data_cancer_train |>
-          ggplot2::ggplot(ggplot2::aes(x = vars_, color = diagnosis)) +
-          ggplot2::geom_histogram(ggplot2::aes(y = ggplot2::after_stat(density))) +
-          ggthemes::scale_colour_colorblind()
+library(tidyverse) 
 
-})
-
-do.call(gridExtra::grid.arrange, hist_vars_cancer)
+data_cancer_train |> 
+  dplyr::select(-id) |>
+  pivot_longer(-diagnosis) |>
+  ggplot(aes(x = value, fill = diagnosis)) +
+  geom_histogram(aes(y = after_stat(density))) +
+  facet_wrap(~name, scales = "free") +
+  ggthemes::scale_fill_colorblind()
+  
 ```
+
+Observando os gráficos
+
 
 Teste de aderencia de distribuições para variaveis dividias por grupo:
 
@@ -128,6 +171,8 @@ grip_test = sapply(3:12, function(i){
 Dados do mundo real, como sinais de fala, fotografias digitais ou varreduras de fMRI, geralmente têm alta dimensionalidade. Para lidar adequadamente com os dados do mundo real, dimensionalidade precisa ser reduzida. Redução de dimensionalidade é a transformação de dados de alta dimensão em uma representação significativa de dimensionalidade reduzida. Idealmente, a representação reduzida deve ter uma dimensionalidade que corresponde à dimensionalidade intrínseca dos dados [@van2009dimensionality]
 
 
+Dado a alta dimensionalidade dos dados trabalhados e buscando observar relações entre as variáveis analisadas, utilizou-se os métodos de **Ánalise de Componentes Principais e Análise Fatorial** para isso
+
 
 ### Análise de Componentes Principais
 
@@ -153,9 +198,9 @@ Buscando visualizar quanto cada variável contribui na primeira componente const
 pr_cancer |> factoextra::fviz_contrib(choice = "var", axes = c(1))
 ```
 
-Viu-se que a variável **area-mean** foi predominante na primeira componente. As demais variáveis não foram captadas significativamente pela primeira componente, porém, ao se rankear elas, observou-se que uma maior importância daquelas variáveis correspondentes ao questões de tamanho celulares, como: **area-mean, perimeter_mean, radius_mean**
+Viu-se que a variável **area_mean** foi predominante na primeira componente. As demais variáveis não foram captadas significativamente pela primeira componente, porém, ao se rankear elas, observou-se uma maior importância daquelas variáveis correspondentes ao questões de tamanho celulares, como: **area-mean, perimeter_mean, radius_mean**
 
-Além disso, tais variáveis são altamente linearmente dependentes, onde tanto area como perímetro são função do raio.
+Além disso, tais variáveis são altamente linearmente dependentes, onde tanto área como perímetro são função do raio.
 
 Onde tem-se os seguintes valores de correlação:
 
@@ -170,30 +215,29 @@ data_cancer_train |>
 ```
 
 
-Assim, buscando eliminar multicolinearidade dos dados, eliminou-se as variáveis: **perimeter_mean, radius_mean**.
-
-```{r}
-data_cancer_train = data_cancer_train |>
-  dplyr::select(-perimeter_mean, -radius_mean)
-```
+Assim, buscando eliminar multicolinearidade dos dados, eliminou-se as variáveis: **perimeter_mean, radius_mean**. A eliminação dessa variáveis não acarreta e perda de informações dado que área é função de raio e perímetro 
 
 
 Realizando novamente a redução de dimensionalidade, mas agora sem as variáveis **perimeter_mean, radius_mean**, tem-se:
 
 ```{r}
 pr_cancer = data_cancer_train |>
-  dplyr::select(dplyr::contains('_mean')) |> 
+  dplyr::select(contains("_mean"),-perimeter_mean, -radius_mean) |>
   princomp() 
 
 pr_cancer |> factoextra::fviz_eig()
-
-pr_cancer |> factoextra::fviz_contrib(choice = "var", axes = c(1))
 ```
 
+Observando o gráfico, viu-se que novamente a primeira componente captou cerca de $100\%$ da variabilidade dos dados
 
 ```{r}
-pr_cancer |> factoextra::fviz_pca_var(col.var = "black")
+pr_cancer |> factoextra::fviz_contrib(choice = "var", axes = c(1))
 ```
+E novamente a variável **area_mean** foi aquele de maior importância na primeira componente
+
+
+Plotando os valores de escore por grupo, construi-se o seguinte gráfico:
+
 
 ```{r}
 factoextra::fviz_pca_ind(pr_cancer,
@@ -204,24 +248,115 @@ factoextra::fviz_pca_ind(pr_cancer,
              )
 ```
 
+É possivel notar que o grupo de tumor benigno se possui uma variabilidade menor que o grupo de tumor maligno. Além disso, o grupo de tumor benigno se concentra em valores negativos e perto de 0 no eixo X, enquanto o grupo de tumor maligno se concentra em valores positivos no eixo X.
+
+
+Segundo @karhunen1995generalizations, quando a primeira componente captura cerca de $100\%$ da variabilidade dos dados, isso pode indicar que todas as variáveis podem ser escritas como uma transformação linear de uma delas, isso é, em algebra linear, todas as variáveis são linearmente dependentes e dado que cada componente é uma base vetorial, necessita-se apenas de uma base para escrever todas os vetores desse sistema
+
+Assim, buscando contornar tal problema, foi utilizado o método de engenharia de características.
+
+Engenharia de características (feature engineering) é o processo de selecionar, transformar e criar atributos (características) relevantes a partir dos dados brutos para melhorar o desempenho e eficácia de modelos [@nargesian2017learning]. O grupamento de características pode ser feito de 2 formas:
+
+* Utilizando conhecimento prévio na área de estudo, e portanto agrupando variáveisem um que agrupamento faça sentido
+
+* Utilizando redução de dimensionalidade, é possível usar técnicas como PCA ou FA para reduzir a complexidade dos dados, identificando combinações lineares de atributos que expliquem a maior parte da variabilidade.
+
+Além disso, é possivel combinar as duas abordagens visando melhores transformações.
+
+Utilizou-se a abordagem de redução de dimensionalidade via **FA** para o agrupamento de características
 
 
 ### Análise Fatorial
 
-```{r}
-fa_ml_cancer = data_cancer_train |>
-                dplyr::select(dplyr::contains('_mean')) |>
-  psych::fa(nfactors = 2, rotate = 'varimax', fm = 'ml') 
+Análise fatorial é uma técnica estatística que busca identificar padrões ou estruturas subjacentes em um conjunto de variáveis observadas, reduzindo sua dimensionalidade e representando-as em termos de fatores latentes que explicam sua covariância.
 
-fa_ml_cancer |> psych::fa.diagram()
-fa_ml_cancer$scores |>
-  as.data.frame() |>
-  dplyr::mutate(diagnosis = data_cancer_train$diagnosis) |>
-  ggplot2::ggplot(ggplot2::aes(ML1, ML2, col = diagnosis)) +
-  ggplot2::geom_point(size = 2) +
-  ggplot2::labs(title = 'Redução via Verossimilhança') +
-  ggthemes::scale_colour_colorblind()
+O modelo fatorial pode utilizar diversos métodos de factorização, as mais conhecidas e aquelas que foram utilizadas no trabalho são:
+
+* **Resíduos Mínimos**
+
+* **Máxima Verossimilhança**
+
+* **Fatores Principais**
+
+Além disso, foi aplicado a rotação **varimax** nos 3 modelos, onde tal método auxiliou na interpretação de varivaies dentre de cada fator
+
+```{r}
+
+fa_rm_cancer = data_cancer_train |>
+                dplyr::select(dplyr::contains('_mean'), -'perimeter_mean', -'radius_mean') |>
+  psych::fa(nfactors = 3, rotate = 'varimax', fm = 'minres') 
+  
+  
+fa_ml_cancer = data_cancer_train |>
+                dplyr::select(dplyr::contains('_mean'), -'perimeter_mean', -'radius_mean') |>
+  psych::fa(nfactors = 3, rotate = 'varimax', fm = 'ml') 
+
+fa_pcomp_cancer = data_cancer_train |>
+                dplyr::select(dplyr::contains('_mean'), -'perimeter_mean', -'radius_mean') |>
+  psych::fa(nfactors = 3, rotate = 'varimax', fm = 'pa') 
+
 ```
 
+Após o calculo dos fatores para cada modelo, construi-se os seguintes gráficos
+
+
+
+```{r}
+fa_rm_cancer |> psych::fa.diagram(main = 'Modelo via Resíduos Minimos')
+
+fa_ml_cancer |> psych::fa.diagram(main = 'Modelo via Máxima Verossimilhança')
+
+fa_pcomp_cancer |> psych::fa.diagram(main = 'Modelo via Fatores Principais')
+
+
+```
+
+É possível ver que a utilização de 2 fatores foi suficiente em 2 dos 3 modelos construidos (Resíduos Mínimos e Fatores Principais). O modelo de via Máxima Verossimilhança utilizou um terceiro fator para a variável **smoothness_mean** ser separada das demais.
+
+Assim, observando os fatores os interpretando, tem-se que:
+
+* Fator 1: Esse fator pode ser interpretado como um indicador de características relacionadas à forma e ao tamanho das células. As variáveis com maiores loadings, como área celular, pontos concavos, concavidade média e textura celular, sugerem que esse fator está relacionado à irregularidade e complexidade das células, possivelmente refletindo a presença de células com formas anormais ou características específicas associadas ao câncer de mama.
+
+* Fator 2: Esse fator pode ser interpretado como um indicador de características relacionadas à estrutura e textura das células. As variáveis com maiores loadings, como dimensão fractal, suavidade celular, compacidade celular e simetria celular, sugerem que esse fator está relacionado à organização estrutural das células, possivelmente refletindo a uniformidade ou padrões na estrutura celular. Pode indicar diferenças nas propriedades estruturais das células cancerígenas em comparação com células saudáveis.
+
+A partir dessas interpretções descritas, foi possivel construir novas variáveis, as chamadas **features**.
+
+## Engenharia de Características
+
+Utilizando os modelos fatoriais construídos no tópico anterior, foram construidas duas novas variaveis, onde essas foram utilizadas no tópico de modelagem:
+
+**TODAS AS VARIÁVEIS FORAM PADRONIZADAS ANTES DE SEREM UTILIZADAS NAS FUNÇÕES**
+
+* **anomaly_feature** =  Característica de anomalia celular. É dada pela seguinte função
+
+**anomaly_features: media(area_mean, concave_points_mean, concavity_mean, texture_mean)**
+
+
+* **structure_feature**: Característica de estrutura celular. É dada pela seguinte função:
+
+**structure_feature = media(compactness_mean, fractal_dimension_mean, smoothness_mean,  symmetry_mean)**
+
+
+```{r}
+library(tidymodels)
+
+variables_to_remove = data_cancer |>
+  dplyr::select(contains("_mean")) |>
+  names()
+
+cancer_recipes = recipes::recipe(diagnosis ~ .,
+                                data = data_cancer_train) |>
+      recipes::update_role(id, new_role = "id") |>
+      step_normalize(all_predictors()) |>
+      step_mutate(anomaly_feature = (area_mean + concave_points_mean + concavity_mean + texture_mean)/4,
+                  structure_feature = (compactness_mean + fractal_dimension_mean + smoothness_mean + symmetry_mean)/4) |>
+  update_role(all_of(variables_to_remove), new_role = "ignore")
+
+data_cancer_features = cancer_recipes |> 
+  prep() |> 
+  bake(new_data = NULL) |>
+  dplyr::select(-contains("_mean")) 
+
+```
 
 

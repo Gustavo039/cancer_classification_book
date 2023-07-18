@@ -5,10 +5,28 @@ toc-title: Conteúdo
 
 # Câncer de Mama: uma rápida contextualização.
 
+## A Doença
+
 O câncer de mama é uma doença maligna que se origina no tecido mamário. É o tipo de câncer mais comum entre as mulheres em todo o mundo e também pode afetar os homens, embora seja menos frequente. Caracteriza-se pelo crescimento anormal e descontrolado das células mamárias, formando um tumor que pode se espalhar para outras partes do corpo.
 
-![](D:/cancer_breast_model/cancer_book/figs/mammo_breast_cancer_xray_fig.jpg)
+![](C:/cancer_breast/cancer_classification_book/figs/mammo_breast_cancer_xray_fig.jpg)
 
 Existem diversos fatores de risco associados ao câncer de mama, como idade avançada, histórico familiar da doença, mutações genéticas, exposição a hormônios, obesidade, consumo excessivo de álcool, entre outros. A detecção precoce é fundamental para o sucesso do tratamento, pois permite o diagnóstico em estágios iniciais, quando as chances de cura são maiores.
 
-A análise
+No momento do diagnóstico, as células do câncer de mama podem ser encontradas apenas no tecido mamário, nos gânglios linfáticos axilares sob o braço ou em locais mais distantes do corpo. Com base em onde o câncer é encontrado, o câncer de mama é classificado em um estágio, de I a IV. O câncer de mama em estágio IV, também chamado de câncer de mama metastático, é o câncer de mama que se espalhou para um local do corpo distante da mama e dos gânglios linfáticos axilares.
+
+## Dados Descritivos
+
+O câncer de mama é atualmente o câncer mais comum em todo o mundo, representando $12,5\%$ de todos os novos casos anuais de câncer em todo o mundo. Aqui estão as estimativas da American Cancer Society para câncer de mama nos Estados Unidos para 2022:
+
+* Cerca de 13% (cerca de 1 em 8) das mulheres americanas desenvolverão câncer de mama invasivo ao longo de suas vidas.
+
+* Em 2022, estima-se que 287.850 novos casos de câncer de mama invasivo sejam diagnosticados em mulheres nos EUA, juntamente com 51.400 novos casos de câncer de mama não invasivo (in situ).
+
+* Espera-se que cerca de 43.250 mulheres nos EUA morram em 2022 de câncer de mama. As taxas de mortalidade por câncer de mama têm diminuído constantemente desde 1989, para um declínio geral de 43% até 2020. Acredita-se que essas reduções sejam o resultado de avanços no tratamento e detecção precoce por meio de triagem. No entanto, o declínio diminuiu ligeiramente nos últimos anos.
+
+* O risco de uma mulher ter câncer de mama quase dobra se ela tiver um parente de primeiro grau (mãe, irmã, filha) diagnosticado com câncer de mama. Aproximadamente 15% das mulheres que têm câncer de mama têm um membro da família diagnosticado com ele.
+
+* O câncer de mama é uma das principais causas de morte relacionada ao câncer em mulheres nos Estados Unidos, perdendo apenas para o câncer de pulmão
+
+

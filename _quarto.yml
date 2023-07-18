@@ -2,7 +2,7 @@ project:
   type: book
 
 book:
-  title: "Análise e Modelagem Classificatória de Dados de Cancer de Mama"
+  title: "Análise e Modelagem Classificatória de Dados de Câncer de Mama"
   author: "Gustavo Almeida Silva"
 
   page-footer:
@@ -17,6 +17,7 @@ book:
     - intro.qmd
     - exploratory.qmd
     - models.qmd
+    - references.qmd
     
 
 bibliography: references.bib

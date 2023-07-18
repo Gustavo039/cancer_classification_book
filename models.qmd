@@ -6,8 +6,10 @@ toc-title: Conteúdo
 
 ```{r, echo=F}
 data_cancer = readr::read_csv('./data/data.csv') |>
-  dplyr::mutate(diagnosis = as.factor(diagnosis )) |>
-  dplyr::select(id, diagnosis , dplyr::contains('_mean'))
+  dplyr::mutate(diagnosis = as.factor(diagnosis)) |>
+  dplyr::select(id, diagnosis , dplyr::contains('_mean')) |>
+  dplyr::select(-perimeter_mean, -radius_mean) |>
+  janitor::clean_names()
 
 set.seed(607) #Fixando semente para reprodução dos resultados 
 data_cancer_split = rsample::initial_split(data_cancer, prop = 0.80, strata = diagnosis)
@@ -42,15 +44,22 @@ Portanto, o diagrama real é dada por:
 library(tidymodels)
 library(tidyverse)
 
+variables_to_remove = data_cancer |>
+  dplyr::select(contains("_mean")) |>
+  names()
+
 cancer_recipe = recipes::recipe(diagnosis ~ .,
                                 data = data_cancer_train) |>
-      update_role(id, new_role = "id")
+      recipes::update_role(id, new_role = "id") |>
+      step_normalize(all_predictors()) |>
+      step_mutate(anomaly_features = (area_mean + concave_points_mean + concavity_mean + texture_mean)/4,
+                  structure_feature = (compactness_mean + fractal_dimension_mean + smoothness_mean + symmetry_mean)/4) |>
+  update_role(all_of(variables_to_remove), new_role = "ignore")
 
 wf = workflows::workflow() |> 
   workflows::add_recipe(cancer_recipe)
 
 
-cross_folds = rsample::vfold_cv(data_cancer_train, strata = diagnosis)
 ```
 
 
@@ -62,8 +71,12 @@ Dado o contexto do problema estudado, a função discriminante estimada foi aque
 
 ### Análise via Discriminante Linear
 
-```{r}
+```{r, warning=F, message=F}
 library(discrim)
+
+data_cancer_train = cancer_recipe |> prep() |> bake(new_data = NULL) 
+
+cross_folds = rsample::vfold_cv(data_cancer_train, strata = diagnosis)
 ```
 
 
@@ -73,17 +86,20 @@ lda_spec = discrim_linear() |>
   set_engine('MASS')
 
 lda_fit = wf |>
-  add_model(lda_spec) |>
-  fit(data = data_cancer_train)
+  workflows:: add_model(lda_spec) |>
+parsnip::fit(data = data_cancer_train)
   
 ```
 
 ```{r}
+library(tidyverse)
+library(tidymodels)
+
 lda_metrics = lda_fit |> 
-  fit_resamples(cross_folds,
-    metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
-    control = control_resamples(save_pred = TRUE)) |>
-  collect_metrics() |>
+  tune::fit_resamples(cross_folds,
+    metrics = yardstick::metric_set(accuracy, roc_auc, sens, j_index, specificity),
+    control = tune::control_resamples(save_pred = TRUE)) |>
+  workflowsets::collect_metrics() |>
   mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
 ```
 
@@ -166,7 +182,7 @@ lr_fit = wf |>
   parsnip::fit(data_cancer_train) 
 
 
-lr_fitted_resamples = fitted_lr_model |>
+lr_fitted_resamples = lr_fit |>
   fit_resamples(cross_folds,
     metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
     control = control_resamples(save_pred = TRUE))
@@ -175,14 +191,8 @@ lr_metrics = lr_fitted_resamples |>
   collect_metrics() |>
   mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
 
-lr_fitted_resamples |> collect_metrics()
 ```
 
-```{r}
-augment(rs_basic) %>%
-  roc_curve(diagnosis, .pred_B) %>%
-  autoplot()
-```
 
 
 
@@ -204,6 +214,7 @@ rand_forest_spec = rand_forest(
 rand_forest_fit = wf |>
   workflows::add_model(rand_forest_spec) 
 
+doParallel::registerDoParallel()
 
 rand_forest_tune = rand_forest_fit |>
   tune_grid(
@@ -222,7 +233,7 @@ rand_forest_tune |>
   ggplot(aes(value, mean, color = parameter)) +
   geom_point(show.legend = FALSE) +
   facet_wrap(~parameter, scales = "free_x") +
-  labs(x = NULL, y = "AUC")
+  labs(x = NULL, y = "sens")
 
 
 rand_forest_tune |>
@@ -238,21 +249,12 @@ rand_forest_tune |>
   facet_wrap(~parameter, scales = "free_x") +
   labs(x = NULL, y = "AUC")
 
-rand_forest_fitted_resamples = rand_forest_fit |>
-  fit_resamples(cross_folds,
-    metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
-    control = control_resamples(save_pred = TRUE))
-
-lr_metrics = lr_fitted_resamples |> 
-  collect_metrics() |>
-  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
-
-lr_fitted_resamples |> collect_metrics()
 ```
 
 ```{r}
-grid_table = parameters(c(min_n(), mtry())) |>
-  grid_regular()
+doParallel::registerDoParallel()
+ grid_table = crossing(min_n = seq(10,11, by=.1),
+          mtry = c(0,1, by = 0.1))
 
 rand_forest_tune = rand_forest_fit |>
   tune_grid(
@@ -261,9 +263,71 @@ rand_forest_tune = rand_forest_fit |>
     grid = grid_table)
 ```
 
+```{r}
+rand_forest_tune |> tune::select_best()
+```
+Após a otimização dos parametros
+
+```{r}
+rand_forest_spec = rand_forest(
+  mtry = 0.1,
+  trees = 2000,
+  min_n = 10.3
+) %>%
+  set_mode("classification") %>%
+  set_engine("randomForest")
+
+rand_forest_fit = wf |>
+  workflows::add_model(rand_forest_spec) 
+
+rand_forest_fitted_resamples = rand_forest_fit |>
+  fit_resamples(
+    resamples = cross_folds,
+    metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity)
+    )
+
+```
+```{r}
+rand_forest_fitted_resamples = rand_forest_fitted_resamples |> 
+  collect_metrics() 
+
+rand_forest_fitted_resamples |>
+    mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err) |>
+    kableExtra::kbl() %>%
+    kableExtra::kable_material(c("striped", "hover"))
+```
 
 
-## KNN
+## Escolha do melhor modelo
+
+Nesse tópico trabalhou-se com os 3 modelos construidos: **Discriminante Linear**, **Regressão Logística** e **Random Forest Otimizado**
+
+Para a escolha do melhor modelo, utilizou-se principalmente as métricas **Curva ROC, Sensibilidade e J-Index**
+
+
+Os modelos possuem as seguintes metricas(para robuste dos valores, foi utilizado novamente metodo de validação cruzada)
+
+```{r}
+lda_metrics |>
+  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err) |>
+  kableExtra::kbl() %>%
+  kableExtra::kable_material(c("striped", "hover"))
+```
+
+```{r}
+lr_metrics|>
+  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err) |>
+  kableExtra::kbl() %>%
+  kableExtra::kable_material(c("striped", "hover"))
+```
+
+
+```{r}
+rand_forest_fitted_resamples|>
+  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err) |>
+  kableExtra::kbl() %>%
+  kableExtra::kable_material(c("striped", "hover"))
+```
 
 
 
