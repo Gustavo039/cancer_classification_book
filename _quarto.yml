@@ -20,7 +20,9 @@ book:
     - conclusao.qmd
     - references.qmd
 
-    
+project:
+  type: website
+  output-dir: docs
 
 bibliography: references.bib
 
