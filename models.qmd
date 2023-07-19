@@ -22,7 +22,7 @@ A classificação correta de tumores benignos e malignos desempenha um papel cru
 
 A documentação dos dados cita que tal classificação indica o proseguindo ou não do paciente para exames mais invasivos, tal sequencia é ilustrada pelo seguinte diagrama:
 
-![](figs/diag_fp_fn.drawio.png){height=500px, fig-align="center"}
+![](figs/diag_fp_fn_falso.png){height=500px, fig-align="center"}
 
 Porém, assim como todos modelos estatísticos, os modelos de classificação apresentam erros, tais erros de classificação são denominados **Falso Positivo** e **Falso Negativo**, onde no caso dos dados trabalhados:
 
@@ -36,7 +36,7 @@ O custo de erro associado ao erro **Falso Negativo** é maior que o **Falso Posi
 
 Portanto, o diagrama real é dada por:
 
-![](figs/diag_ver.drawio.png){height=500px, fig-align="center"}
+![](figs/diag_fp_fn.png){height=500px, fig-align="center"}
 
 
 
@@ -71,14 +71,21 @@ Dado o contexto do problema estudado, a função discriminante estimada foi aque
 
 ### Análise via Discriminante Linear
 
+O discriminante linear é o mais simples dentre os modelos discriminantes. Ele busca separar os grupos de analises via uma reta, maximizando a distancia entre os grupos
+
 ```{r, warning=F, message=F}
 library(discrim)
 
-data_cancer_train = cancer_recipe |> prep() |> bake(new_data = NULL) 
+data_cancer_train = cancer_recipe |> prep() |> bake(new_data = NULL)
+data_cancer_test = cancer_recipe |> prep() |> bake(new_data = data_cancer_test)
 
 cross_folds = rsample::vfold_cv(data_cancer_train, strata = diagnosis)
 ```
 
+Para uma estimação robusta, utilizou-se o método de **cross validation**, que se trata da divisão do conjunto de treino em determinado número de *folds*, no caso foram dividos 10 folds. A cada iteração 9 folds eram usados como fonte de dados para otimização dos parametros do modelo e o fold restante era utilizado como validação das métricas. Ao final, obteu-se as seguintes metricas
+
+
+Para cada metrica, foi construido um intervalo de confiança de $95\%$
 
 ```{r}
 lda_spec = discrim_linear() |>
@@ -100,23 +107,18 @@ lda_metrics = lda_fit |>
     metrics = yardstick::metric_set(accuracy, roc_auc, sens, j_index, specificity),
     control = tune::control_resamples(save_pred = TRUE)) |>
   workflowsets::collect_metrics() |>
-  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
+  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err) 
+
+lda_metrics|>
+  kableExtra::kbl() %>%
+  kableExtra::kable_material(c("striped", "hover"))
 ```
 
 
 
 ### Análise via Discriminante Quadrático
 
-```{r}
-cov_diagnosis = list('B','M') |>
-  map(~data_cancer_train |>
-        filter(diagnosis == .) |>
-        dplyr::select(-'id', -'diagnosis') |>
-        cov())
-
-cov_diagnosis[[1]] - cov_diagnosis[[2]]
-```
-
+O modelo de discrimante quadrático é mais utilizado quando as matrizes de covariancias são diferentes entre os grupo.
 
 ```{r}
 qda_spec = discrim_quad() |>
@@ -128,6 +130,8 @@ qda_fit = wf |>
   fit(data = data_cancer_train)
 ```
 
+Para uma estimação robusta, utilizou-se novamente o método de **cross validation**
+
 ```{r}
 qda_fitted_resamples = qda_fit |> 
   fit_resamples(cross_folds,
@@ -137,19 +141,16 @@ qda_fitted_resamples = qda_fit |>
 qda_metrics =  qda_fitted_resamples |>
   collect_metrics() |>
   mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
-```
 
-```{r}
-augment(qda_fitted_resamples) |>
-  roc_curve(diagnosis, .pred_B) |>
-  autoplot()
+qda_metrics |> 
+  kableExtra::kbl() %>%
+  kableExtra::kable_material(c("striped", "hover"))
 ```
-
 
 
 ## Escolha do Melhor Discriminante
 
-Observando as estimativas obtidas via, viu-se que ambos os modelos apresentaram desempenho semelhantes. Assim utilizou-se como critério principal aquele que obteve o melhor desempenho na métrica **sensibilidade** dado que o contexto do problema trabalho indica um maior custo de erro para **Falso Negativo**
+Observando as estimativas obtidas, viu-se que ambos os modelos apresentaram desempenho semelhantes. Assim utilizou-se como critério principal aquele que obteve o melhor desempenho na métrica **sensibilidade** dado que o contexto do problema trabalho indica um maior custo de erro para **Falso Negativo**
 
 Para melhor visualização, construi-se a seguinte tabela comparando o valor da sensibilidade de ambos os modelos:
 
@@ -170,11 +171,18 @@ Novamente, ambos os modelos se mostraram extramamentes semelhantes, porém notou
 
 ## Regressão Logística
 
+A regressão logística é um modelo estatístico utilizado para prever a probabilidade de ocorrência de um evento binário
+
+No contexto do problema trabalhado, utilizou-se a função de ligação **logito**
+
 ```{r}
 logistic_spec = parsnip::logistic_reg() |>
   parsnip::set_engine("glm", family = stats::binomial(link='logit')) |>
   parsnip::set_mode("classification")
 ```
+
+
+Para uma estimação robusta, utilizou-se novamente o método de **cross validation**
 
 ```{r}
 lr_fit = wf |>
@@ -191,12 +199,22 @@ lr_metrics = lr_fitted_resamples |>
   collect_metrics() |>
   mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err)
 
+lr_metrics|>
+  kableExtra::kbl() %>%
+  kableExtra::kable_material(c("striped", "hover"))
+
 ```
 
-
+O modelo de Regressão Logistica apresentou um desempenho semelhante ao de discriminates, uma análise mais detalaha foi feito nos próximos tópicos
 
 
 ## Randon Forest
+
+Random Forest é um algoritmo de aprendizado de máquina baseado em árvores de decisão. Ele combina várias árvores para criar um modelo robusto e preciso. Cada árvore é treinada em uma amostra aleatória e faz previsões independentes, e o resultado final é obtido por votação ou média. É eficaz em problemas de classificação e regressão, lidando com sobreajuste e identificando características importantes.
+
+No contexto do problema trabalhado, a random forest foi definida para classificação.
+
+Além disso, foi utilizado o metodo de otimização de parâmetros para a construção de um melhor modelo
 
 ```{r, message=F, warning=F}
 library(randomForest)
@@ -220,7 +238,7 @@ rand_forest_tune = rand_forest_fit |>
   tune_grid(
     resamples = cross_folds,
     metrics = metric_set(accuracy, roc_auc, sens, j_index, specificity),
-    grid = 20)
+    grid = 10)
 
 rand_forest_tune |>
   collect_metrics() %>%
@@ -251,6 +269,11 @@ rand_forest_tune |>
 
 ```
 
+Observando os valores dos hiperparametros  *min_n* e *mtry* vemos um intervalo definido em que eles apresentaram melhor desempenho para a otimização da area sob a curve ROC e para a sensibilidade do modelo
+
+Assim, foi realziado um estudo maior sobre esse área de otimização
+
+
 ```{r}
 doParallel::registerDoParallel()
  grid_table = crossing(min_n = seq(10,11, by=.1),
@@ -263,10 +286,12 @@ rand_forest_tune = rand_forest_fit |>
     grid = grid_table)
 ```
 
-```{r}
-rand_forest_tune |> tune::select_best()
-```
-Após a otimização dos parametros
+
+Assim, os parametros ótimos são:
+
+* **min_n** = 10.3
+
+* **mtry** = 0.1
 
 ```{r}
 rand_forest_spec = rand_forest(
@@ -287,6 +312,9 @@ rand_forest_fitted_resamples = rand_forest_fit |>
     )
 
 ```
+
+Para uma estimação robusta das metricas, utilizou-se novamente o método de **cross validation**
+
 ```{r}
 rand_forest_fitted_resamples = rand_forest_fitted_resamples |> 
   collect_metrics() 
@@ -297,37 +325,108 @@ rand_forest_fitted_resamples |>
     kableExtra::kable_material(c("striped", "hover"))
 ```
 
+O modelo de Random Forest apresentou um desempenho semelhante aos demais modelos, uma análise mais detalhada foi feito nos próximos tópicos
 
-## Escolha do melhor modelo
+
+# Escolha do Melhor modelo
 
 Nesse tópico trabalhou-se com os 3 modelos construidos: **Discriminante Linear**, **Regressão Logística** e **Random Forest Otimizado**
 
 Para a escolha do melhor modelo, utilizou-se principalmente as métricas **Curva ROC, Sensibilidade e J-Index**
 
+* **Curva ROC**: Representa a área sob a curva ROC, quanto maior for essa área, mekhor foi o desempenho do modelo
+
+* **Sensibilidade**: Indica a taxa de verdadeiros positivos do modelos, no contexto trabalhado, indica individuos com tumores malignos que foram classificados corretamente
+
+* **J-Index**: Dado por = (sensibilidade+especificidade)-1, é uma metrica que busca resumir os valores de sensibilidade e especificidade em um valor só
+
 
 Os modelos possuem as seguintes metricas(para robuste dos valores, foi utilizado novamente metodo de validação cruzada)
 
 ```{r}
-lda_metrics |>
-  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err) |>
+bind_rows(lda_metrics, lr_metrics, rand_forest_fitted_resamples) |>
+  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err,
+         model = c(rep('LDA', 5), rep('RegLog', 5), rep('RandFor',5))
+         ) |>
+  relocate(model) |>
+  dplyr::select(-'.config') |>
   kableExtra::kbl() %>%
   kableExtra::kable_material(c("striped", "hover"))
 ```
+
+
+Analisando os valores calculados, viu-se que os 3 modelos aprsentaram valores semelhantes para a area sob a curva ROC. Já para a sensibilidade, o modelo de discriminante linear foi aquele a apresentar melhor desempenho, possuindo uma estimativa pontual alta e um baixo valor de erro padrão. No entanto, o modelo LDA foi aquele a apresentar o pior valor de J-Index e portanto apresentou um baixo desempenho em balancear erros de falso positivo e falso negativo. O modelo a apresentar um bom desempenho nos 3 metricas foi o de regressão logistica.
+
+Os modelos de Regressão Logistica e de Random Forest apresentarm desempenho semelhantes nas 3 métricas de interesse, porém, dado que o modelo logístico possui uma melhor interpretabilidade e um menor tempo de execução computacional ele foi o escolhido como o melhor modelo de classificação para o tema estudado
+
+## Interpretação e Métricas do Modelo nos Dados de Teste
+
+No início do tópico de exploração de dados, os dados foram dividos em treino em teste, onde toda a etapa de exploração e modelagem foi realizado em cima do conjunto de dados de treino.
+
+O seguinte tópico busca observar o comportamento do modelo selecionado como o melhor entre os 3 construidos no conjunto de dados de treino. A divisão de dados ajuda a reduzir a viés amostral e ajuda a observar a capacidade de generalização do modelo em novos dados.
+
+O modelo selecionado foi o de Regressão Logistica, que possui a seguinte forma:
+
+
+$$ln(\frac{Y}{1-Y})=\beta_0 + \beta_1*anomaly\_feature + \beta_2*structure\_feature$$
+
+Com os Betas estimados de:
+
+$$\beta_0 = -19.00366, e \ ROR_{beta_0}=exp(-19.00366) = 5.5 *10^{-9}$$
+$$\beta_1 = 85.72805, e \ ROR_{beta_1}=exp(85.72805) = 1.7 * 10^{35}$$
+
+$$\beta_2 = -0.05412, e \ ROR_{beta_2}=exp(-0.05412) = 0.9472426$$
+
+
+Interpretando os betas calculados para cada variável expliativa, temos que 
+
+* Foi calculado um **Regression Odds Ratio** de $1.7 * 10^{35}$ para a variável anomalia celular, que possui metricas como área celular, concavidade e textura. Isso indica que quanto maior for o grau de anomalia celular do individuo, maior será a chance de se possuir um tumor maligno. Via **ROR**, para cada 1 unidade aumentada nessa variável, a probabilidade do individuo possuir um tumor maligno é $1.7 * 10^{35}$ da probabilidade de um individuo com uma unidade a menos
+
+* Foi calculado um **Regression Odds Ratio** de $0.9472426$ para a variável estrutura celular, que possui metricas como dimensão fractal, suavidade e simetria celular. Isso indica que quanto maior for o grau qualidade da estrutura celular, menor será a chance do indivíduo possuir um tumor maligno. Via **ROR**, para cada 1 unidade aumentada nessa variável, a probabilidade do individuo possuir um tumor maligno é $0.9472426$ da probabilidade de um individuo com uma unidade a menos
+
+Assim, os betas estimados são bem explicados pelo contexto do problema. Quanto maior o grau de anomalia celular, maior a chance de se possuir um tumor maligno, enquanto, quanto maior for a qualidade da estrutura celular, menor a chance de se possuir um tumor maligno
+
+O modelo teve o seguinte desempenho no conjunto de dados de treino
+
+* Matriz de confusão
 
 ```{r}
-lr_metrics|>
-  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err) |>
-  kableExtra::kbl() %>%
-  kableExtra::kable_material(c("striped", "hover"))
+library(probably)
+cancer_preds =
+  augment(lr_fit, data_cancer_test) |>
+  dplyr::select(diagnosis, contains("pred")) |>
+  mutate(
+      pred = make_two_class_pred(
+      estimate = .pred_B, 
+      levels = levels(diagnosis), 
+      threshold = .65
+    )
+  ) 
+
+cancer_preds |>
+  conf_mat(diagnosis, pred) |>
+  autoplot(type = 'heatmap') 
 ```
 
+Com as seguintes métricas calculadas
 
 ```{r}
-rand_forest_fitted_resamples|>
-  mutate(lower_bound = mean - 1.96*std_err, upper_bound = mean + 1.96*std_err) |>
+data.frame(sens = yardstick::sens(cancer_preds,
+                       diagnosis,
+                       pred),
+          spec = yardstick::spec(cancer_preds,
+                       diagnosis,
+                       pred),
+          j_index = yardstick::j_index(cancer_preds,
+                       diagnosis,
+                       pred)
+           ) |>
+  dplyr::select(contains("estimate"))|>
   kableExtra::kbl() %>%
   kableExtra::kable_material(c("striped", "hover"))
 ```
+
+Portanto, a partir da matriz de confusão e das metricas calculadas, vemos um bom desempenho do modelo. Apresentando um baixo erro de falso negativo (alta sensibilidade) e uma boa especificidade. Os valores calculados nos dados de teste foram semelhantes a aqueles calculados nos dados de treino, indicando uma boa generalização do modelo.
 
 
 

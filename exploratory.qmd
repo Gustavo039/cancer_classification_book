@@ -141,29 +141,12 @@ data_cancer_train |>
   
 ```
 
-Observando os gráficos
+Observando os gráficos vemos que a variável area celular média
+divide bem os 2 grupos, assim como concavidade. Simetria e textura foram variáveis que não dividiram tão bem os grupos, onde eles se apresentam sobrepostos
 
 
-Teste de aderencia de distribuições para variaveis dividias por grupo:
 
-```{r}
-B = data_cancer_train |>
-      dplyr::filter(diagnosis == 'B') 
-
-M = data_cancer_train |>
-      dplyr::filter(diagnosis == 'M') 
-
-grip_test = sapply(3:12, function(i){
-  dist1 = B[,i] |> dplyr::pull()
-  dist2 = M[,i] |> dplyr::pull()
-  ks = ks.test(dist1, dist2)
-  cr = cramer::cramer.test(dist1, dist2)
-  
-  return(c(ks$p.value, cr$p.value))
-})
-```
-
-
+Dada o número de variáveis do conjunto de dados, realizar uma análise individual seria demorada e tediosa, podendo mostrar pouco avanço na interpretação dos dados. Assim utilizou-se a técnica de redução de dimensionalidade para um melhor entendimento das relações entre as variáveis
 
 
 ## Redução de dimensionalidade 
@@ -233,6 +216,7 @@ Observando o gráfico, viu-se que novamente a primeira componente captou cerca d
 ```{r}
 pr_cancer |> factoextra::fviz_contrib(choice = "var", axes = c(1))
 ```
+
 E novamente a variável **area_mean** foi aquele de maior importância na primeira componente
 
 

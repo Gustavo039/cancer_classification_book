@@ -1,0 +1,7 @@
+--- 
+toc-title: Conteúdo
+---
+
+# Conclusão {.unnumbered}
+
+Neste estudo de análise e modelagem de dados de câncer de mama, diversas técnicas foram aplicadas, incluindo análises de redução de dimensionalidade como PCA e FA, engenharia de características, modelos de discriminantes lineares e quadráticos, regressão logística e Random Forest. Após a avaliação dos modelos, constatou-se que o de regressão logística obteve o melhor desempenho, demonstrando alta sensibilidade na detecção de casos positivos de câncer de mama. Esses resultados destacam a importância dessas técnicas na identificação e classificação precisa de casos de câncer de mama, oferecendo perspectivas promissoras para futuras pesquisas e aplicações clínicas.
